@@ -9,3 +9,39 @@ services:
       - BASE_PATH=/music  # You can change this to any path inside the container
     stdin_open: true  # Required for interactive input
     tty: true         # Required for interactive input
+
+  # Optional Navidrome music server - uncomment to enable
+  # navidrome:
+  #   image: deluan/navidrome:latest
+  #   container_name: navidrome
+  #   user: 1000:1000  # should be owner of volumes - adjust for your user
+  #   ports:
+  #     - "4533:4533"
+  #   restart: unless-stopped
+  #   environment:
+  #     # Uncomment and customize as needed:
+  #     # ND_LOGLEVEL: debug
+  #     # ND_SCANSCHEDULE: 1h
+  #     # ND_BASEURL: ""
+  #   volumes:
+  #     - ./navidrome/data:/data
+  #     - ./music:/music:ro  # Matches BASE_PATH from n-music tool
+
+  # Optional Feishin music client - uncomment to enable
+  # feishin:
+  #   image: 'ghcr.io/jeffvli/feishin:latest'
+  #   container_name: feishin
+  #   environment:
+  #     - SERVER_NAME=navidrome  # pre-defined server name
+  #     - SERVER_LOCK=true  # When true AND name/type/url are set, only username/password can be toggled
+  #     - SERVER_TYPE=navidrome  # connects to Navidrome
+  #     - SERVER_URL=http://navidrome:4533  # connects to the Navidrome service
+  #     - PUID=1000
+  #     - PGID=1000
+  #     - UMASK=002
+  #     - TZ=America/Los_Angeles
+  #   ports:
+  #     - 9180:9180
+  #   restart: unless-stopped
+  #   depends_on:
+  #     - navidrome  # Ensures Navidrome starts first

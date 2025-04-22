@@ -1,4 +1,51 @@
-# 🎵 N-Music Tool
+## 🎵 Media Server Integration
+
+N-Music Tool can be integrated with popular music streaming servers for an enhanced listening experience!
+
+### Available Media Servers
+
+#### Navidrome Music Server
+
+[Navidrome](https://navidrome.org/) is a self-hosted, open source music server and streamer. It gives you:
+
+- Web-based music player
+- Mobile apps via subsonic API
+- Music discovery features
+- Artist biographies and album art
+- Multi-user support with different permission levels
+
+#### Feishin Music Client
+
+[Feishin](https://github.com/jeffvli/feishin) is a beautiful desktop music client that connects to various music servers:
+
+- Modern, responsive interface
+- Enhanced playback features
+- Customizable views
+- Playlist management
+- Works perfectly with Navidrome
+
+### Setting Up Media Servers
+
+To enable these optional media servers:
+
+1. Run the media services setup script:
+   ```bash
+   ./setup-music-services.sh
+   ```
+
+2. This will:
+   - Configure Navidrome to use your music directory
+   - Optionally enable Feishin as well
+   - Start the services (if requested)
+
+3. Access your music:
+   - Navidrome: http://localhost:4533
+   - Feishin: http://localhost:9180
+
+4. Default credentials for Navidrome:
+   - Username: admin@admin.com
+   - Password: admin
+   - **Important:** Change these after first login!# 🎵 N-Music Tool
 
 A powerful utility for managing your music collection with features for downloading music from Spotify, creating playlists, and embedding lyrics.
 

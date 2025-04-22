@@ -88,6 +88,9 @@ chmod +x n-music.sh setup.sh
 if [ -f "build-binary.sh" ]; then
     chmod +x build-binary.sh
 fi
+if [ -f "setup-music-services.sh" ]; then
+    chmod +x setup-music-services.sh
+fi
 
 # Create activation script
 echo -e "${YELLOW}Creating activation script...${NC}"
@@ -110,6 +113,9 @@ echo -e "Other available commands:"
 echo -e "- ${YELLOW}./setup.sh${NC} - Change your music directory configuration"
 if [ -f "build-binary.sh" ]; then
     echo -e "- ${YELLOW}./build-binary.sh${NC} - Create a standalone binary executable"
+fi
+if [ -f "setup-music-services.sh" ]; then
+    echo -e "- ${YELLOW}./setup-music-services.sh${NC} - Set up optional music streaming servers"
 fi
 echo ""
 echo -e "${GREEN}Would you like to run N-Music Tool now? (y/n)${NC}"
