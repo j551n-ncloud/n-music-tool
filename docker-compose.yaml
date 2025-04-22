@@ -1,0 +1,11 @@
+
+services:
+  n-music:
+    build: .
+    container_name: n-music-tool
+    volumes:
+      - ./music:/music
+    environment:
+      - BASE_PATH=/music  # You can change this to any path inside the container
+    stdin_open: true  # Required for interactive input
+    tty: true         # Required for interactive input

@@ -1,9 +1,10 @@
 # 🎵 N-Music Tool
 
-A bash script utility for managing your music collection with features for downloading music from Spotify, creating playlists, and embedding lyrics.
+A powerful utility for managing your music collection with features for downloading music from Spotify, creating playlists, and embedding lyrics.
 
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Bash Version](https://img.shields.io/badge/bash-4.0%2B-blue)
+![SpotDL](https://img.shields.io/badge/spotdl-latest-orange)
 
 ## 📋 Features
 
@@ -11,14 +12,22 @@ A bash script utility for managing your music collection with features for downl
 - **Automatic Lyrics Generation**: Generate synchronized .lrc lyric files during download
 - **Playlist Management**: Easily create .m3u playlists from your music collection
 - **Lyrics Embedding**: Embed lyrics directly into MP3 files for better compatibility with music players
+- **Configurable Music Directory**: Set and change your music directory anytime
+- **Multiple Installation Options**: Choose between virtual environment, standalone binary, or Docker
+- **User-Friendly Interface**: Interactive menu-based operation
 
 ## 🔧 Requirements
 
 - [spotdl](https://github.com/spotDL/spotify-downloader) - For downloading music from Spotify
 - [eyeD3](https://eyed3.readthedocs.io/en/latest/) - For manipulating MP3 file metadata
+- [ffmpeg](https://ffmpeg.org/) - For audio conversion
 - Bash 4.0 or higher
 
 ## 🚀 Installation
+
+### Option 1: Quick Installation Script (Recommended for Local Use)
+
+The easiest way to get started with N-Music Tool:
 
 1. Clone this repository:
    ```bash
@@ -26,20 +35,68 @@ A bash script utility for managing your music collection with features for downl
    cd n-music-tool
    ```
 
-2. Make the script executable:
+2. Run the installation script:
    ```bash
-   chmod +x n-music.sh
+   chmod +x install.sh
+   ./install.sh
    ```
 
-3. Install dependencies:
+This script will:
+- Install all prerequisites if needed (Python, pip, venv, ffmpeg)
+- Create a Python virtual environment with required dependencies
+- Set up your music directory configuration
+- Create convenient launcher scripts
+
+### Option 2: Create a Standalone Binary
+
+If you want a standalone binary that can be used without Python dependencies:
+
+1. After running the installation script, run:
    ```bash
-   # On Ubuntu/Debian
-   sudo apt-get install python3-pip
-   pip3 install spotdl eyeD3
-   
-   # On macOS
-   brew install python3
-   pip3 install spotdl eyeD3
+   ./build-binary.sh
+   ```
+
+2. This will create a standalone binary in the `bin` directory
+3. Optionally install it system-wide (the script will prompt you)
+
+### Option 3: Using Docker
+
+For containerized usage with all dependencies pre-installed:
+
+1. Build and run using Docker Compose:
+   ```bash
+   docker-compose up -d
+   docker-compose exec n-music bash
+   ```
+
+2. Or use Docker directly with a custom music directory:
+   ```bash
+   docker build -t n-music-tool .
+   docker run -it -v "/path/to/your/music:/music" -e BASE_PATH=/music n-music-tool
+   ```
+
+## ⚙️ Configuration
+
+You can change your music directory at any time:
+
+```bash
+./setup.sh
+```
+
+This will create a configuration file at `~/.config/n-music/config` that stores your base music directory.music-tool.git
+   cd n-music-tool
+   ```
+
+2. Build and run using Docker Compose:
+   ```bash
+   docker-compose up -d
+   docker-compose exec n-music bash /app/n-music.sh
+   ```
+
+   Or using Docker directly:
+   ```bash
+   docker build -t n-music-tool .
+   docker run -it -v "$(pwd)/music:/music" n-music-tool
    ```
 
 ## 📖 Usage

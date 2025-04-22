@@ -1,0 +1,9 @@
+.git
+.github
+.gitignore
+README.md
+LICENSE
+music/
+*.mp3
+*.lrc
+*.m3u

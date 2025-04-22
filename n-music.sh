@@ -1,15 +1,34 @@
 #!/bin/bash
 
+# --- Source the config file for BASE_PATH if it exists ---
+CONFIG_FILE="${HOME}/.config/n-music/config"
+if [ -f "$CONFIG_FILE" ]; then
+    source "$CONFIG_FILE"
+else
+    # Default base path if not configured
+    BASE_PATH="${BASE_PATH:-${HOME}/Music}"
+fi
+
 # --- Reusable function for selecting or entering a directory ---
 select_directory() {
-    echo "Available folders in the current directory:"
+    echo "Using music directory: $BASE_PATH"
+    echo "Available folders in $BASE_PATH:"
     echo "-------------------------------------------"
-
-    folder_count=$(find . -maxdepth 1 -type d ! -name "." | wc -l)
-
-    select dir in */ "Enter a custom directory"; do
+    
+    # Create BASE_PATH if it doesn't exist
+    if [ ! -d "$BASE_PATH" ]; then
+        echo "Creating base directory: '$BASE_PATH'"
+        mkdir -p "$BASE_PATH"
+    fi
+    
+    folder_count=$(find "$BASE_PATH" -maxdepth 1 -type d ! -path "$BASE_PATH" | wc -l)
+    # Get just the folder names relative to BASE_PATH
+    mapfile -t folders < <(find "$BASE_PATH" -maxdepth 1 -type d ! -path "$BASE_PATH" -exec basename {} \;)
+    
+    select dir in "${folders[@]}" "Enter a custom directory"; do
         if [[ "$REPLY" == "$((folder_count + 1))" ]]; then
-            read -p "Enter your custom directory: " SELECTED_DIR
+            read -p "Enter your custom directory name (just the name, no path): " custom_dir
+            SELECTED_DIR="$BASE_PATH/$custom_dir"
             if [ -d "$SELECTED_DIR" ]; then
                 echo "Using existing directory: '$SELECTED_DIR'"
             else
@@ -17,8 +36,8 @@ select_directory() {
                 mkdir -p "$SELECTED_DIR"
             fi
             break
-        elif [ -n "$dir" ]; then
-            SELECTED_DIR="$dir"
+        elif [[ -n "$dir" ]]; then
+            SELECTED_DIR="$BASE_PATH/$dir"
             echo "Using existing directory: '$SELECTED_DIR'"
             break
         else
@@ -58,12 +77,10 @@ embed_lyrics() {
     echo "📥 Embedding lyrics into MP3 files in '$SELECTED_DIR'..."
     shopt -s nullglob
     mp3_files=("$SELECTED_DIR"/*.mp3)
-
     if [ ${#mp3_files[@]} -eq 0 ]; then
         echo "⚠️ No MP3 files found. Skipping lyrics embedding."
         return
     fi
-
     for file in "${mp3_files[@]}"; do
         lrc_file="${file%.mp3}.lrc"
         if [ -f "$lrc_file" ]; then
@@ -73,7 +90,6 @@ embed_lyrics() {
             echo "⛔ No matching lyrics file for: $file"
         fi
     done
-
     echo "✨ Lyrics embedding complete!"
 }
 
@@ -89,7 +105,6 @@ while true; do
     echo "5) Exit"
     echo "-----------------------------"
     read -p "Choose an option: " choice
-
     case "$choice" in
         1)
             download_music
