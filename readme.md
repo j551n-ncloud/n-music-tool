@@ -31,7 +31,7 @@ The easiest way to get started with N-Music Tool:
 
 1. Clone this repository:
    ```bash
-   git clone https://github.com/username/n-music-tool.git
+   git clone https://github.com/j551n-ncloud/n-music-tool.git
    cd n-music-tool
    ```
 
