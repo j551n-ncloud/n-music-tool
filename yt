@@ -1,0 +1,511 @@
+#!/bin/bash
+
+# --- Color definitions ---
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# --- Source the config file for BASE_PATH if it exists ---
+CONFIG_FILE="${HOME}/.config/n-music/config"
+if [ -f "$CONFIG_FILE" ]; then
+    source "$CONFIG_FILE"
+else
+    # Default base path if not configured
+    BASE_PATH="${BASE_PATH:-${HOME}/Music}"
+fi
+
+# --- Check for yt-dlp ---
+check_dependencies() {
+    echo -e "${YELLOW}Checking for required dependencies...${NC}"
+    
+    if ! command -v yt-dlp &> /dev/null; then
+        echo -e "${RED}yt-dlp is not installed. Attempting to install...${NC}"
+        if command -v pip3 &> /dev/null; then
+            pip3 install --break-system-packages yt-dlp
+        elif command -v pip &> /dev/null; then
+            pip install --break-system-packages yt-dlp
+        elif command -v apt-get &> /dev/null; then
+            sudo apt-get update && sudo apt-get install -y python3-pip
+            pip3 install --break-system-packages yt-dlp
+        elif command -v brew &> /dev/null; then
+            brew install yt-dlp
+        else
+            echo -e "${RED}Could not install yt-dlp. Please install it manually:${NC}"
+            echo "pip3 install --break-system-packages yt-dlp"
+            exit 1
+        fi
+    fi
+    
+    if ! command -v ffmpeg &> /dev/null; then
+        echo -e "${RED}ffmpeg is not installed. Attempting to install...${NC}"
+        if command -v apt-get &> /dev/null; then
+            sudo apt-get update && sudo apt-get install -y ffmpeg
+        elif command -v brew &> /dev/null; then
+            brew install ffmpeg
+        else
+            echo -e "${RED}Could not install ffmpeg. Please install it manually.${NC}"
+            exit 1
+        fi
+    fi
+    
+    echo -e "${GREEN}All dependencies are installed.${NC}"
+}
+
+# --- Reusable function for selecting or entering a directory ---
+select_directory() {
+    echo "Using music directory: $BASE_PATH"
+    echo "Available folders in $BASE_PATH:"
+    echo "-------------------------------------------"
+    
+    # Create BASE_PATH if it doesn't exist
+    if [ ! -d "$BASE_PATH" ]; then
+        echo "Creating base directory: '$BASE_PATH'"
+        mkdir -p "$BASE_PATH"
+    fi
+    
+    # Get just the folder names relative to BASE_PATH
+    mapfile -t folders < <(find "$BASE_PATH" -maxdepth 1 -type d ! -path "$BASE_PATH" -exec basename {} \;)
+    
+    # Check if there are any folders
+    if [ ${#folders[@]} -eq 0 ]; then
+        echo "No subdirectories found. Enter a name to create one:"
+        read -p "Directory name: " dir_name
+        SELECTED_DIR="$BASE_PATH/$dir_name"
+        mkdir -p "$SELECTED_DIR"
+        echo "Created and using directory: '$SELECTED_DIR'"
+        return
+    fi
+    
+    # Display folders with numbers
+    for i in "${!folders[@]}"; do
+        echo "$((i+1))) ${folders[$i]}"
+    done
+    
+    # Option for creating a new directory
+    echo "$((${#folders[@]}+1))) Create a new directory"
+    
+    # Get user selection
+    read -p "Select a directory (1-$((${#folders[@]}+1))): " selection
+    
+    # Check if selection is for creating a new directory
+    if [ "$selection" -eq "$((${#folders[@]}+1))" ]; then
+        read -p "Enter your new directory name: " dir_name
+        SELECTED_DIR="$BASE_PATH/$dir_name"
+        mkdir -p "$SELECTED_DIR"
+        echo "Created and using directory: '$SELECTED_DIR'"
+    elif [ "$selection" -ge 1 ] && [ "$selection" -le "${#folders[@]}" ]; then
+        SELECTED_DIR="$BASE_PATH/${folders[$((selection-1))]}"
+        echo "Using existing directory: '$SELECTED_DIR'"
+    else
+        echo "Invalid selection. Using base directory."
+        SELECTED_DIR="$BASE_PATH"
+    fi
+}
+
+# --- Function to download a single track ---
+download_track() {
+    select_directory
+    
+    read -p "Enter YouTube URL for the track: " TRACK_URL
+    
+    # Prompt for audio format
+    echo "Choose audio format:"
+    echo "1) MP3"
+    echo "2) M4A (AAC)"
+    echo "3) OPUS (best quality)"
+    echo "4) FLAC (lossless)"
+    read -p "Select format [1-4] (default: 1): " format_choice
+    
+    case "$format_choice" in
+        2) FORMAT="m4a" ;;
+        3) FORMAT="opus" ;;
+        4) FORMAT="flac" ;;
+        *) FORMAT="mp3" ;;
+    esac
+    
+    # Prompt for audio quality
+    echo "Choose audio quality:"
+    echo "1) Best"
+    echo "2) High (256kbps)"
+    echo "3) Medium (192kbps)"
+    echo "4) Low (128kbps)"
+    read -p "Select quality [1-4] (default: 1): " quality_choice
+    
+    case "$quality_choice" in
+        2) QUALITY="256K" ;;
+        3) QUALITY="192K" ;;
+        4) QUALITY="128K" ;;
+        *) QUALITY="0" ;; # Best
+    esac
+    
+    echo -e "${BLUE}Downloading track from YouTube...${NC}"
+    echo -e "${YELLOW}This will download the track, embed thumbnail, and extract metadata.${NC}"
+    
+    # Set output template
+    OUTPUT_TEMPLATE="$SELECTED_DIR/%(title)s.%(ext)s"
+    
+    # Build the command
+    if [ "$QUALITY" == "0" ]; then
+        # Best quality
+        yt-dlp -f bestaudio --extract-audio --audio-format "$FORMAT" \
+            --embed-thumbnail --embed-metadata --parse-metadata "title:%(title)s" \
+            --add-metadata -o "$OUTPUT_TEMPLATE" "$TRACK_URL"
+    else
+        # Specific quality
+        yt-dlp -f bestaudio --extract-audio --audio-format "$FORMAT" \
+            --audio-quality "$QUALITY" --embed-thumbnail --embed-metadata \
+            --parse-metadata "title:%(title)s" --add-metadata \
+            -o "$OUTPUT_TEMPLATE" "$TRACK_URL"
+    fi
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}Download complete in '$SELECTED_DIR'!${NC}"
+    else
+        echo -e "${RED}Download failed. Please check the URL and try again.${NC}"
+    fi
+}
+
+# --- Function to download a playlist ---
+download_playlist() {
+    select_directory
+    
+    read -p "Enter YouTube playlist URL: " PLAYLIST_URL
+    
+    # Prompt for audio format
+    echo "Choose audio format:"
+    echo "1) MP3"
+    echo "2) M4A (AAC)"
+    echo "3) OPUS (best quality)"
+    echo "4) FLAC (lossless)"
+    read -p "Select format [1-4] (default: 1): " format_choice
+    
+    case "$format_choice" in
+        2) FORMAT="m4a" ;;
+        3) FORMAT="opus" ;;
+        4) FORMAT="flac" ;;
+        *) FORMAT="mp3" ;;
+    esac
+    
+    # Prompt for audio quality
+    echo "Choose audio quality:"
+    echo "1) Best"
+    echo "2) High (256kbps)"
+    echo "3) Medium (192kbps)"
+    echo "4) Low (128kbps)"
+    read -p "Select quality [1-4] (default: 1): " quality_choice
+    
+    case "$quality_choice" in
+        2) QUALITY="256K" ;;
+        3) QUALITY="192K" ;;
+        4) QUALITY="128K" ;;
+        *) QUALITY="0" ;; # Best
+    esac
+    
+    # Check if playlist items should be numbered
+    read -p "Add track numbers to filenames? (y/n): " add_numbers
+    if [[ "$add_numbers" =~ ^([yY][eE][sS]|[yY])$ ]]; then
+        OUTPUT_TEMPLATE="$SELECTED_DIR/%(playlist_index)s - %(title)s.%(ext)s"
+    else
+        OUTPUT_TEMPLATE="$SELECTED_DIR/%(title)s.%(ext)s"
+    fi
+    
+    # Ask about creating an M3U playlist
+    read -p "Create M3U playlist file? (y/n): " create_m3u
+    
+    echo -e "${BLUE}Downloading playlist from YouTube...${NC}"
+    echo -e "${YELLOW}This will download all tracks, embed thumbnails, and extract metadata.${NC}"
+    
+    # Create a subdirectory for the playlist
+    read -p "Enter name for the playlist folder (leave empty to use main directory): " playlist_name
+    if [ -n "$playlist_name" ]; then
+        PLAYLIST_DIR="$SELECTED_DIR/$playlist_name"
+        mkdir -p "$PLAYLIST_DIR"
+        OUTPUT_TEMPLATE="$PLAYLIST_DIR/%(playlist_index)s - %(title)s.%(ext)s"
+        echo "Creating playlist directory: $PLAYLIST_DIR"
+    else
+        PLAYLIST_DIR="$SELECTED_DIR"
+    fi
+    
+    # Build the command
+    if [ "$QUALITY" == "0" ]; then
+        # Best quality
+        yt-dlp -f bestaudio --extract-audio --audio-format "$FORMAT" \
+            --embed-thumbnail --embed-metadata --parse-metadata "playlist_title:%(playlist_title)s" \
+            --add-metadata -o "$OUTPUT_TEMPLATE" "$PLAYLIST_URL"
+    else
+        # Specific quality
+        yt-dlp -f bestaudio --extract-audio --audio-format "$FORMAT" \
+            --audio-quality "$QUALITY" --embed-thumbnail --embed-metadata \
+            --parse-metadata "playlist_title:%(playlist_title)s" --add-metadata \
+            -o "$OUTPUT_TEMPLATE" "$PLAYLIST_URL"
+    fi
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}Playlist download complete in '$PLAYLIST_DIR'!${NC}"
+        
+        # Create M3U playlist if requested
+        if [[ "$create_m3u" =~ ^([yY][eE][sS]|[yY])$ ]]; then
+            # Get playlist name from YouTube if available
+            if [ -z "$playlist_name" ]; then
+                playlist_name=$(yt-dlp --get-filename -o "%(playlist_title)s" "$PLAYLIST_URL" | head -n 1)
+                # Fallback to "YouTube Playlist" if name extraction fails
+                playlist_name=${playlist_name:-"YouTube Playlist"}
+                # Replace spaces with underscores and remove special characters
+                playlist_name=$(echo "$playlist_name" | tr ' ' '_' | tr -cd '[:alnum:]_-')
+            fi
+            
+            # Create the M3U file
+            echo "#EXTM3U" > "$PLAYLIST_DIR/$playlist_name.m3u"
+            find "$PLAYLIST_DIR" -name "*.$FORMAT" | sort | while read -r file; do
+                # Get just the filename
+                filename=$(basename "$file")
+                echo "$filename" >> "$PLAYLIST_DIR/$playlist_name.m3u"
+            done
+            
+            echo -e "${GREEN}Created playlist file: $playlist_name.m3u${NC}"
+        fi
+    else
+        echo -e "${RED}Playlist download failed. Please check the URL and try again.${NC}"
+    fi
+}
+
+# --- Function to fix metadata and thumbnails ---
+fix_metadata() {
+    select_directory
+    
+    echo -e "${BLUE}This will attempt to fix metadata and thumbnails for all audio files in:${NC}"
+    echo -e "${YELLOW}$SELECTED_DIR${NC}"
+    read -p "Continue? (y/n): " confirm
+    
+    if [[ ! "$confirm" =~ ^([yY][eE][sS]|[yY])$ ]]; then
+        return
+    fi
+    
+    # Get audio files
+    audio_files=($SELECTED_DIR/*.{mp3,m4a,opus,flac})
+    
+    if [ ${#audio_files[@]} -eq 0 ] || [ ! -e "${audio_files[0]}" ]; then
+        echo -e "${RED}No audio files found in the selected directory.${NC}"
+        return
+    fi
+    
+    echo -e "${YELLOW}Found ${#audio_files[@]} audio files. Processing...${NC}"
+    
+    for file in "${audio_files[@]}"; do
+        if [ ! -e "$file" ]; then continue; fi
+        
+        echo -e "${BLUE}Processing: $(basename "$file")${NC}"
+        
+        # Extract filename without extension
+        filename=$(basename "$file")
+        extension="${filename##*.}"
+        filename="${filename%.*}"
+        
+        # Use yt-dlp to embed metadata if missing
+        ffprobe -v quiet -show_format -of json "$file" | grep -q "title" || {
+            echo "Fixing metadata..."
+            # Try to search for the title on YouTube and get metadata
+            search_term=$(echo "$filename" | tr ' ' '+')
+            yt-dlp --extract-audio --audio-format "$extension" \
+                --skip-download --embed-metadata --add-metadata \
+                --output "$file.new" \
+                "ytsearch:$search_term"
+            
+            # If successful, replace the old file
+            if [ -f "$file.new.$extension" ]; then
+                mv "$file.new.$extension" "$file"
+            fi
+        }
+        
+        # Fix/embed thumbnails if missing
+        if [ "$extension" = "mp3" ] || [ "$extension" = "m4a" ]; then
+            ffprobe -v quiet -show_streams -select_streams v -of json "$file" | grep -q "codec_type" || {
+                echo "No embedded thumbnail found. Attempting to add one..."
+                # Create a temporary thumbnail file
+                temp_thumb="/tmp/thumb_$RANDOM.jpg"
+                
+                # Try to search for the song on YouTube and get thumbnail
+                search_term=$(echo "$filename" | tr ' ' '+')
+                yt-dlp --skip-download --write-thumbnail \
+                    --output "$temp_thumb" \
+                    "ytsearch:$search_term"
+                
+                # Find the thumbnail file (might have .webp extension)
+                thumb_file=$(find /tmp -name "thumb_*" | grep -i thumb | head -n 1)
+                
+                if [ -n "$thumb_file" ]; then
+                    # Convert to jpg if needed
+                    if [[ "$thumb_file" == *.webp ]]; then
+                        convert "$thumb_file" "${temp_thumb}.jpg"
+                        thumb_file="${temp_thumb}.jpg"
+                    fi
+                    
+                    # Embed the thumbnail
+                    case "$extension" in
+                        mp3)
+                            eyeD3 --add-image="$thumb_file:FRONT_COVER" "$file"
+                            ;;
+                        m4a)
+                            AtomicParsley "$file" --artwork "$thumb_file" --overWrite
+                            ;;
+                    esac
+                    
+                    # Clean up temporary files
+                    rm -f "$thumb_file" "${temp_thumb}.jpg"
+                    
+                    echo "Added thumbnail to $(basename "$file")"
+                else
+                    echo "Could not find a thumbnail for $(basename "$file")"
+                fi
+            }
+        fi
+    done
+    
+    echo -e "${GREEN}Metadata and thumbnail fixing complete!${NC}"
+}
+
+# --- Function to search and download ---
+search_and_download() {
+    select_directory
+    
+    read -p "Enter search term: " SEARCH_TERM
+    
+    echo -e "${BLUE}Searching YouTube for: ${SEARCH_TERM}${NC}"
+    
+    # Search YouTube and display results
+    yt-dlp --flat-playlist --get-id --get-title "ytsearch10:$SEARCH_TERM" > /tmp/ytsearch.txt
+    
+    # Parse and display results
+    echo -e "${YELLOW}Search Results:${NC}"
+    echo "-------------------------------------------"
+    
+    i=1
+    while read -r line; do
+        # Every two lines will be title and video ID
+        if [ $((i % 2)) -eq 1 ]; then
+            title=$line
+        else
+            video_id=$line
+            echo "$((i/2)). $title"
+        fi
+        i=$((i+1))
+    done < /tmp/ytsearch.txt
+    
+    echo "-------------------------------------------"
+    read -p "Enter number to download (0 to cancel): " selection
+    
+    if [ "$selection" -eq 0 ]; then
+        echo "Download canceled."
+        return
+    fi
+    
+    # Get the selected video ID
+    line_num=$((selection * 2))
+    video_id=$(sed "${line_num}q;d" /tmp/ytsearch.txt)
+    
+    # Clean up
+    rm -f /tmp/ytsearch.txt
+    
+    # Download the selected track
+    TRACK_URL="https://www.youtube.com/watch?v=$video_id"
+    
+    # Prompt for audio format
+    echo "Choose audio format:"
+    echo "1) MP3"
+    echo "2) M4A (AAC)"
+    echo "3) OPUS (best quality)"
+    echo "4) FLAC (lossless)"
+    read -p "Select format [1-4] (default: 1): " format_choice
+    
+    case "$format_choice" in
+        2) FORMAT="m4a" ;;
+        3) FORMAT="opus" ;;
+        4) FORMAT="flac" ;;
+        *) FORMAT="mp3" ;;
+    esac
+    
+    # Prompt for audio quality
+    echo "Choose audio quality:"
+    echo "1) Best"
+    echo "2) High (256kbps)"
+    echo "3) Medium (192kbps)"
+    echo "4) Low (128kbps)"
+    read -p "Select quality [1-4] (default: 1): " quality_choice
+    
+    case "$quality_choice" in
+        2) QUALITY="256K" ;;
+        3) QUALITY="192K" ;;
+        4) QUALITY="128K" ;;
+        *) QUALITY="0" ;; # Best
+    esac
+    
+    echo -e "${BLUE}Downloading selected track from YouTube...${NC}"
+    
+    # Set output template
+    OUTPUT_TEMPLATE="$SELECTED_DIR/%(title)s.%(ext)s"
+    
+    # Build the command
+    if [ "$QUALITY" == "0" ]; then
+        # Best quality
+        yt-dlp -f bestaudio --extract-audio --audio-format "$FORMAT" \
+            --embed-thumbnail --embed-metadata --parse-metadata "title:%(title)s" \
+            --add-metadata -o "$OUTPUT_TEMPLATE" "$TRACK_URL"
+    else
+        # Specific quality
+        yt-dlp -f bestaudio --extract-audio --audio-format "$FORMAT" \
+            --audio-quality "$QUALITY" --embed-thumbnail --embed-metadata \
+            --parse-metadata "title:%(title)s" --add-metadata \
+            -o "$OUTPUT_TEMPLATE" "$TRACK_URL"
+    fi
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}Download complete in '$SELECTED_DIR'!${NC}"
+    else
+        echo -e "${RED}Download failed. Please try again.${NC}"
+    fi
+}
+
+# --- Main Menu ---
+main_menu() {
+    while true; do
+        echo ""
+        echo -e "${BLUE}🎵 YT-Music Downloader${NC}"
+        echo "-------------------------------------------"
+        echo "1) Download a single track from URL"
+        echo "2) Download a YouTube playlist"
+        echo "3) Search and download"
+        echo "4) Fix metadata and thumbnails"
+        echo "5) Exit"
+        echo "-------------------------------------------"
+        
+        read -p "Choose an option: " choice
+        
+        case "$choice" in
+            1)
+                download_track
+                ;;
+            2)
+                download_playlist
+                ;;
+            3)
+                search_and_download
+                ;;
+            4)
+                fix_metadata
+                ;;
+            5)
+                echo -e "${GREEN}Exiting. Enjoy your music!${NC}"
+                exit 0
+                ;;
+            *)
+                echo -e "${RED}Invalid option. Please try again.${NC}"
+                ;;
+        esac
+    done
+}
+
+# --- Main execution starts here ---
+check_dependencies
+main_menu
